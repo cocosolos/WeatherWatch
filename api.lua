@@ -1,8 +1,8 @@
-local https = require("ssl.https")
 local json = require("parse")
 
-local api_endpoint = "https://weather.solos.dev"
 local debug = false
+local connection = debug and require("socket.http") or require("ssl.https")
+local api_endpoint = debug and "http://127.0.0.1:3000" or "https://weather.solos.dev"
 
 local function dump(o)
     if type(o) == 'table' then
@@ -23,7 +23,7 @@ function M.get_gap(zone_id)
     local message = ""
     local resp = {}
     local endpoint = api_endpoint .. "/zone/" .. zone_id
-    local body, code, headers, status = https.request(endpoint)
+    local body, code, headers, status = connection.request(endpoint)
 
     if code == 200 then
         local zone_name = res.zones[zone_id].en
@@ -40,7 +40,7 @@ function M.get_gap(zone_id)
         message = "Unable to contact weather server."
     end
 
-    return message
+    log(message)
 end
 
 function M.get_global_gaps(limit)
@@ -50,7 +50,7 @@ function M.get_global_gaps(limit)
     if limit then
         endpoint = endpoint .. "?limit=" .. limit
     end
-    local body, code, headers, status = https.request(endpoint)
+    local body, code, headers, status = connection.request(endpoint)
 
     if code == 200 then
         local result = json.parse(body)
@@ -69,7 +69,7 @@ function M.get_global_gaps(limit)
         message = "Unable to contact weather server."
     end
 
-    return message
+    log(message)
 end
 
 function M.find_weather(weather)
@@ -94,7 +94,7 @@ function M.find_weather(weather)
         end
     end
 
-    local body, code, headers, status = https.request(endpoint)
+    local body, code, headers, status = connection.request(endpoint)
 
     if code == 200 then
         local weather_name = res.weather[tonumber(weather)].en
@@ -114,10 +114,44 @@ function M.find_weather(weather)
         message = "Unable to contact weather server."
     end
 
-    return message
+    log(message)
 end
 
-function M.post(weather_info)
+local function post(packet)
+    local response_body = {}
+    local result
+
+    if debug then log("Packet: " .. packet) end
+
+    local _unused, code, headers, status = connection.request {
+        url = api_endpoint .. "/submit",
+        method = "POST",
+        headers = {
+            ["user-agent"] = "weatherwatch/".._addon.version,
+            ["content-type"] = "application/json",
+            ["content-length"] = tostring(packet:len())
+        },
+        source = ltn12.source.string(packet),
+        sink = ltn12.sink.table(response_body)
+    }
+
+    if code == 400 then
+        result = json.parse(response_body[1])
+
+        if next(result) ~= nil then
+            log(result.error)
+        end
+        return false
+    end
+
+    if debug then
+        log("Code: " .. code)
+        log("Response: " .. dump(response_body))
+    end
+    return true
+end
+
+function M.submit(weather_info)
     local cycle =  math.floor((weather_info.timestamp - VANA_EPOCH) / WEATHER_CYCLE_LENGTH)
 
     local packet1 =
@@ -133,27 +167,7 @@ function M.post(weather_info)
 
     packet1 = packet1 .. '}'
 
-    local response_body = {}
-
-    if debug then log("Packet 1: " .. packet1) end
-
-    local res, code, response_headers = https.request {
-        url = api_endpoint .. "/submit",
-        method = "POST",
-        headers = {
-            ["content-type"] = "application/json",
-            ["content-length"] = tostring(packet1:len())
-        },
-        source = ltn12.source.string(packet1),
-        sink = ltn12.sink.table(response_body)
-    }
-
-    if debug then
-        log("Code: " .. code)
-        log("Response: " .. dump(response_body))
-    end
-
-    if weather_info.previous_weather_start then
+    if post(packet1) and weather_info.previous_weather_start then
         if weather_info.previous_weather_start > weather_info.weather_start then
             cycle = cycle - 1
         end
@@ -165,23 +179,7 @@ function M.post(weather_info)
             ', "tick": ' .. weather_info.previous_weather_start ..
             ', "offset": ' .. weather_info.previous_weather_offset .. '}'
 
-        if debug then log("Packet 2: " .. packet2) end
-
-        res, code, response_headers = https.request {
-            url = api_endpoint .. "/submit",
-            method = "POST",
-            headers = {
-                ["content-type"] = "application/json",
-                ["content-length"] = tostring(packet2:len())
-            },
-            source = ltn12.source.string(packet2),
-            sink = ltn12.sink.table(response_body)
-        }
-
-        if debug then
-            log("Code: " .. code)
-            log("Response: " .. dump(response_body))
-        end
+        post(packet2)
     end
 end
 

@@ -8,8 +8,9 @@ api = require('api')
 files = require('files')
 file = T{}
 
+-- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.1'
+_addon.version = '0.0.2'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 
@@ -59,14 +60,14 @@ function log_weather(weather_info)
         weather_info.weather_start,
         weather_info.weather,
         weather_info.weather_offset,
-        weather_info.previous_weather_start and weather_info.previous_weather_start or -1,
-        weather_info.previous_weather and weather_info.previous_weather or -1,
-        weather_info.previous_weather_offset and weather_info.previous_weather_offset or -1,
+        weather_info.previous_weather_start or -1,
+        weather_info.previous_weather or -1,
+        weather_info.previous_weather_offset or -1,
         weather_info.raw_packet
     )
     file.packet_table:append(log_string)
     if settings.send then
-        api.post(weather_info)
+        api.submit(weather_info)
     end
 end
 
@@ -76,10 +77,7 @@ function print_status(with_gaps)
             local weather_start = math.floor(VANA_EPOCH + math.floor((weather_info.timestamp - VANA_EPOCH) / WEATHER_CYCLE_LENGTH) * WEATHER_CYCLE_LENGTH + weather_info.weather_start * VANA_MINUTE)
             log(res.weather[weather_info.weather].en.." started on "..os.date('%c', weather_start))
             if with_gaps and settings.send then
-                local message = api.get_gap(weather_info.zone)
-                if message ~= "" then
-                    log(message)
-                end
+                api.get_gap(weather_info.zone)
             end
         else
             log("Unknown weather status. Try zoning or relogging.")
@@ -100,17 +98,19 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.previous_weather_offset = data:unpack('H', 0x76 + 1)
         weather_info.raw_packet = data:hex()
 
-        if zone_info[weather_info.zone] ~= weather_info.weather_start then
-            zone_info[weather_info.zone] = weather_info.weather_start
+        if not bad_data(weather_info) then
+            if zone_info[weather_info.zone] ~= weather_info.weather_start then
+                zone_info[weather_info.zone] = weather_info.weather_start
+                coroutine.schedule(function()
+                    log_weather(weather_info)
+                end, 3)
+            end
             coroutine.schedule(function()
-                log_weather(weather_info)
-            end, 3)
+                print_status(true)
+            end, 4)
         end
-        coroutine.schedule(function()
-            print_status(true)
-        end, 4)
     elseif (id == 0x057 and current_zone ~= 0) then
-        weather_info = weather_info and weather_info or {}
+        weather_info = weather_info or {}
         weather_info.timestamp = os.time()
         weather_info.zone = current_zone
         weather_info.previous_weather = weather_info.weather
@@ -121,23 +121,47 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.weather_offset = data:unpack('H', 0x0A + 1)
         weather_info.raw_packet = data:hex()
 
-        zone_info[weather_info.zone] = weather_info.weather_start
-        coroutine.schedule(function()
-            log_weather(weather_info)
-            print_status(false)
-        end, 3)
+        if not bad_data(weather_info) then
+            zone_info[weather_info.zone] = weather_info.weather_start
+            coroutine.schedule(function()
+                log_weather(weather_info)
+                print_status(false)
+            end, 3)
+        end
     end
 end
 
+function bad_data(weather)
+    local unload = false
+    local server_id = windower.ffxi.get_info().server
+    if type(res.servers[server_id]) ~= 'table' or not res.servers[server_id].name then
+        log('Private servers are not supported.')
+        unload = true
+    end
+    if weather then
+        if 
+            weather.weather and weather.weather >= #res.weather or
+            weather.previous_weather and weather.previous_weather >= #res.weather
+        then
+            log('Invalid data detected.')
+            unload = true
+        end
+    end
+    if unload then
+        windower.send_command('lua unload weatherwatch')
+    end
+    return unload
+end
+
 windower.register_event('login',function ()
-    if windower.ffxi.get_info().logged_in then
+    if windower.ffxi.get_info().logged_in and not bad_data() then
         setup_zone(windower.ffxi.get_info().zone)
         log('Thank you for using WeatherWatch!')
     end
 end)
 
 windower.register_event('load',function ()
-    if windower.ffxi.get_info().logged_in then
+    if windower.ffxi.get_info().logged_in and not bad_data() then
         setup_zone(windower.ffxi.get_info().zone)
         log('Thank you for using WeatherWatch!')
         log('Consider zoning or relogging to capture the current weather.')
@@ -168,12 +192,13 @@ windower.register_event('addon command', function(command, ...)
             log(message .. "element weather...")
             for k, v in ipairs(res.weather) do
                 if v.element == inverted_elements[search_string] then
-                    log(api.find_weather(v.id))
+                    api.find_weather(v.id)
                 end
             end
         elseif inverted_weathers[search_string] then
             message = message:sub(1, -2) .. "...\n"
-            log(message .. api.find_weather(inverted_weathers[search_string]))
+            log(message)
+            api.find_weather(inverted_weathers[search_string])
         else
             message = "Please enter a valid weather or element: "
             for _, v in ipairs(res.weather) do
@@ -203,7 +228,7 @@ windower.register_event('addon command', function(command, ...)
         end
         config.save(settings)
     elseif command == 'gaps' then
-        log(api.get_global_gaps(args[1]))
+        api.get_global_gaps(args[1])
     elseif command == 'help' then
         log("status - Prints the current zone weather information.")
         log("find <weather|element> - Searches for the specified weather.")
