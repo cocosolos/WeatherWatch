@@ -10,7 +10,7 @@ file = T{}
 
 -- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.2'
+_addon.version = '0.0.3'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 
@@ -140,8 +140,8 @@ function bad_data(weather)
     end
     if weather then
         if 
-            weather.weather and weather.weather >= #res.weather or
-            weather.previous_weather and weather.previous_weather >= #res.weather
+            weather.weather and weather.weather > 19 or
+            weather.previous_weather and weather.previous_weather > 19
         then
             log('Invalid data detected.')
             unload = true
