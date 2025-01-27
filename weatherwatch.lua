@@ -10,7 +10,7 @@ file = T{}
 
 -- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.3'
+_addon.version = '0.0.4'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 
@@ -98,17 +98,17 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.previous_weather_offset = data:unpack('H', 0x76 + 1)
         weather_info.raw_packet = data:hex()
 
-        if not bad_data(weather_info) then
-            if zone_info[weather_info.zone] ~= weather_info.weather_start then
-                zone_info[weather_info.zone] = weather_info.weather_start
-                coroutine.schedule(function()
+        coroutine.schedule(function()
+            if not bad_data(weather_info) then
+                if zone_info[weather_info.zone] ~= weather_info.weather_start then
+                    zone_info[weather_info.zone] = weather_info.weather_start
                     log_weather(weather_info)
-                end, 3)
+                end
+                coroutine.schedule(function()
+                    print_status(true)
+                end, 1)
             end
-            coroutine.schedule(function()
-                print_status(true)
-            end, 4)
-        end
+        end, 3)
     elseif (id == 0x057 and current_zone ~= 0) then
         weather_info = weather_info or {}
         weather_info.timestamp = os.time()
@@ -121,13 +121,13 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.weather_offset = data:unpack('H', 0x0A + 1)
         weather_info.raw_packet = data:hex()
 
-        if not bad_data(weather_info) then
-            zone_info[weather_info.zone] = weather_info.weather_start
-            coroutine.schedule(function()
+        coroutine.schedule(function()
+            if not bad_data(weather_info) then
+                zone_info[weather_info.zone] = weather_info.weather_start
                 log_weather(weather_info)
                 print_status(false)
-            end, 3)
-        end
+            end
+        end, 3)
     end
 end
 
