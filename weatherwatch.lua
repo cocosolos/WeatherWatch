@@ -1,6 +1,7 @@
 require('luau')
 require('strings')
 require('pack')
+require('tables')
 res = require('resources')
 bit = require('bit')
 config = require('config')
@@ -10,7 +11,7 @@ file = T{}
 
 -- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.4'
+_addon.version = '0.0.5'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 
@@ -53,21 +54,21 @@ function setup_zone(zone)
     file.packet_table = files.new('data/'.. windower.ffxi.get_player().name ..'/'.. res.zones[zone].en ..'.lua', true)
 end
 
-function log_weather(weather_info)
+function log_weather(weather_data)
     local log_string = string.format(
         "    [%d] = {['weather_start']=%d, ['weather']=%d, ['weather_offset']=%d, ['previous_weather_start']=%d, ['previous_weather']=%d, ['previous_weather_offset']=%d, ['raw_packet']=\"%s\"},\n",
-        weather_info.timestamp,
-        weather_info.weather_start,
-        weather_info.weather,
-        weather_info.weather_offset,
-        weather_info.previous_weather_start or -1,
-        weather_info.previous_weather or -1,
-        weather_info.previous_weather_offset or -1,
-        weather_info.raw_packet
+        weather_data.timestamp,
+        weather_data.weather_start,
+        weather_data.weather,
+        weather_data.weather_offset,
+        weather_data.previous_weather_start or -1,
+        weather_data.previous_weather or -1,
+        weather_data.previous_weather_offset or -1,
+        weather_data.raw_packet
     )
     file.packet_table:append(log_string)
     if settings.send then
-        api.submit(weather_info)
+        api.submit(weather_data)
     end
 end
 
@@ -98,11 +99,13 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.previous_weather_offset = data:unpack('H', 0x76 + 1)
         weather_info.raw_packet = data:hex()
 
+        local weather_data = table.copy(weather_info)
+
         coroutine.schedule(function()
-            if not bad_data(weather_info) then
-                if zone_info[weather_info.zone] ~= weather_info.weather_start then
-                    zone_info[weather_info.zone] = weather_info.weather_start
-                    log_weather(weather_info)
+            if not bad_data(weather_data) then
+                if zone_info[weather_data.zone] ~= weather_data.weather_start then
+                    zone_info[weather_data.zone] = weather_data.weather_start
+                    log_weather(weather_data)
                 end
                 coroutine.schedule(function()
                     print_status(true)
@@ -121,10 +124,12 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.weather_offset = data:unpack('H', 0x0A + 1)
         weather_info.raw_packet = data:hex()
 
+        local weather_data = table.copy(weather_info)
+
         coroutine.schedule(function()
-            if not bad_data(weather_info) then
-                zone_info[weather_info.zone] = weather_info.weather_start
-                log_weather(weather_info)
+            if not bad_data(weather_data) then
+                zone_info[weather_data.zone] = weather_data.weather_start
+                log_weather(weather_data)
                 print_status(false)
             end
         end, 3)

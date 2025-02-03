@@ -151,33 +151,33 @@ local function post(packet)
     return true
 end
 
-function M.submit(weather_info)
-    local cycle =  math.floor((weather_info.timestamp - VANA_EPOCH) / WEATHER_CYCLE_LENGTH)
+function M.submit(weather_data)
+    local cycle =  math.floor((weather_data.timestamp - VANA_EPOCH) / WEATHER_CYCLE_LENGTH)
 
     local packet1 =
-        '{"zoneId": ' .. weather_info.zone ..
+        '{"zoneId": ' .. weather_data.zone ..
         ', "cycle": ' .. cycle ..
-        ', "weatherId": ' .. weather_info.weather ..
-        ', "tick": ' .. weather_info.weather_start ..
-        ', "offset": ' .. weather_info.weather_offset
+        ', "weatherId": ' .. weather_data.weather ..
+        ', "tick": ' .. weather_data.weather_start ..
+        ', "offset": ' .. weather_data.weather_offset
 
-    if weather_info.previous_weather_start then
-        packet1 = packet1 .. ', "prev": ' .. weather_info.previous_weather_start
+    if weather_data.previous_weather_start then
+        packet1 = packet1 .. ', "prev": ' .. weather_data.previous_weather_start
     end
 
     packet1 = packet1 .. '}'
 
-    if post(packet1) and weather_info.previous_weather_start then
-        if weather_info.previous_weather_start > weather_info.weather_start then
+    if post(packet1) and weather_data.previous_weather_start then
+        if weather_data.previous_weather_start > weather_data.weather_start then
             cycle = cycle - 1
         end
 
         local packet2 =
-            '{"zoneId": ' .. weather_info.zone ..
+            '{"zoneId": ' .. weather_data.zone ..
             ', "cycle": ' .. cycle ..
-            ', "weatherId": ' .. weather_info.previous_weather ..
-            ', "tick": ' .. weather_info.previous_weather_start ..
-            ', "offset": ' .. weather_info.previous_weather_offset .. '}'
+            ', "weatherId": ' .. weather_data.previous_weather ..
+            ', "tick": ' .. weather_data.previous_weather_start ..
+            ', "offset": ' .. weather_data.previous_weather_offset .. '}'
 
         post(packet2)
     end
