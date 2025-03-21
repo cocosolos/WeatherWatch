@@ -11,7 +11,7 @@ file = T{}
 
 -- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.5'
+_addon.version = '0.0.6'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 

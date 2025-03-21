@@ -4,6 +4,8 @@ local debug = false
 local connection = debug and require("socket.http") or require("ssl.https")
 local api_endpoint = debug and "http://127.0.0.1:3000" or "https://weather.solos.dev"
 
+connection.TIMEOUT = 5
+
 local function dump(o)
     if type(o) == 'table' then
         local s = '{ '
