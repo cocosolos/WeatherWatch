@@ -11,7 +11,7 @@ file = T{}
 
 -- https://github.com/cocosolos/WeatherWatch
 _addon.name = 'WeatherWatch'
-_addon.version = '0.0.6'
+_addon.version = '0.0.7'
 _addon.author = 'Coco Solos'
 _addon.commands = {'weatherwatch', 'ww'}
 
@@ -49,11 +49,6 @@ for k, v in pairs(res.elements) do
     inverted_elements[string.lower(v.en):gsub("%s", "")] = k
 end
 
-function setup_zone(zone)
-    current_zone = zone
-    file.packet_table = files.new('data/'.. windower.ffxi.get_player().name ..'/'.. res.zones[zone].en ..'.lua', true)
-end
-
 function log_weather(weather_data)
     local log_string = string.format(
         "    [%d] = {['weather_start']=%d, ['weather']=%d, ['weather_offset']=%d, ['previous_weather_start']=%d, ['previous_weather']=%d, ['previous_weather_offset']=%d, ['raw_packet']=\"%s\"},\n",
@@ -66,6 +61,7 @@ function log_weather(weather_data)
         weather_data.previous_weather_offset or -1,
         weather_data.raw_packet
     )
+    file.packet_table = files.new('data/'.. windower.ffxi.get_player().name ..'/'.. res.zones[weather_data.zone].en ..'.lua', true)
     file.packet_table:append(log_string)
     if settings.send then
         api.submit(weather_data)
@@ -98,6 +94,7 @@ function check_incoming_chunk(id, data, modified, injected, blocked)
         weather_info.weather_offset = data:unpack('H', 0x74 + 1)
         weather_info.previous_weather_offset = data:unpack('H', 0x76 + 1)
         weather_info.raw_packet = data:hex()
+        current_zone = weather_info.zone
 
         local weather_data = table.copy(weather_info)
 
@@ -158,27 +155,15 @@ function bad_data(weather)
     return unload
 end
 
-windower.register_event('login',function ()
-    if windower.ffxi.get_info().logged_in and not bad_data() then
-        setup_zone(windower.ffxi.get_info().zone)
-        log('Thank you for using WeatherWatch!')
-    end
-end)
-
 windower.register_event('load',function ()
     if windower.ffxi.get_info().logged_in and not bad_data() then
-        setup_zone(windower.ffxi.get_info().zone)
+        current_zone = windower.ffxi.get_info().zone
         log('Thank you for using WeatherWatch!')
         log('Consider zoning or relogging to capture the current weather.')
     end
 end)
 
-windower.register_event('zone change', function(new, old)
-    setup_zone(new)
-end)
-
 windower.register_event('incoming chunk', check_incoming_chunk)
-
 
 windower.register_event('addon command', function(command, ...)
     command = command and command:lower() or 'help'
